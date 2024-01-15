@@ -61,3 +61,9 @@ export async function updateInvoice(id: string, formData: FormData) {
     revalidatePath('/dashboard/invoices'); // clear the client cache and make a new server request.
     redirect('/dashboard/invoices'); // redirect the user to the invoice's page.
 };
+
+export async function deleteInvoice(id: string) {
+    await sql`DELETE FROM invoices WHERE id = ${id}`;
+    revalidatePath('/dashboard/invoices'); // revalidate clientside route cache, since we deleted an invoice.
+    // Since this action is being called in the /dashboard/invoices path, you don't need to call redirect. Calling revalidatePath will trigger a new server request and re-render the table.
+}
