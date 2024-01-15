@@ -27,12 +27,23 @@ export async function createInvoice(formData: FormData) {
     const amountInCents = amount * 100; // Its good practice to store monetary values in cents in databases to eliminate JavaScript floating-point errors and ensure greater accuracy.
     const date = new Date().toISOString().split('T')[0]; // The 'T' separates the date (2022-03-14) from the time (10:30:00Z) in out ISOString 2022-03-14T10:30:00Z. So we will get '2022-03-14'.
 
-    await sql`
+    try {
+        await sql`
         INSERT INTO invoices (customer_id, amount, status, date)
         VALUES (${customerId}, ${amountInCents}, ${status}, ${date})
     `;
-
+    } catch (error) {
+        return {
+            message: 'Database Error: Failed to Create Invoice.',
+        };
+    };
     revalidatePath('/dashboard/invoices'); // Revalidate the client-side route cache to update UI with new data.
+
+    /**
+     * Note how redirect is being called outside of the try/catch block.
+     * This is because redirect works by throwing an error, which would be caught by the catch block.
+     * To avoid this, you can call redirect after try/catch. redirect would only be reachable if try is successful.
+     */
     redirect('/dashboard/invoices'); // Redirect user back to the invoices page.
 
 };
@@ -51,19 +62,29 @@ export async function updateInvoice(id: string, formData: FormData) {
     // Converting the amount to cents, as we did in the createInvoice function.
     const amountInCents = amount * 100;
 
-    // Pass the variables to the SQL query.
-    await sql`
+    try { // Pass the variables to the SQL query.
+        await sql`
     UPDATE invoices
     SET customer_id = ${customerId}, amount = ${amountInCents}, status = ${status}
     WHERE id = ${id}
   `;
-
+    } catch (error) {
+        return {
+            message: 'Database Error: Failed to Create Invoice.',
+        };
+    };
     revalidatePath('/dashboard/invoices'); // clear the client cache and make a new server request.
     redirect('/dashboard/invoices'); // redirect the user to the invoice's page.
 };
 
 export async function deleteInvoice(id: string) {
-    await sql`DELETE FROM invoices WHERE id = ${id}`;
-    revalidatePath('/dashboard/invoices'); // revalidate clientside route cache, since we deleted an invoice.
-    // Since this action is being called in the /dashboard/invoices path, you don't need to call redirect. Calling revalidatePath will trigger a new server request and re-render the table.
+    try {
+        await sql`DELETE FROM invoices WHERE id = ${id}`;
+        revalidatePath('/dashboard/invoices'); // revalidate clientside route cache, since we deleted an invoice.
+        // Since this action is being called in the /dashboard/invoices path, you don't need to call redirect. Calling revalidatePath will trigger a new server request and re-render the table.
+    } catch (error) {
+        return {
+            message: 'Database Error: Failed to Create Invoice.',
+        };
+    };
 }
