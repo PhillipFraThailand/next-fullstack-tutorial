@@ -1,6 +1,8 @@
 'use server'; // Mark that all exported functions here are server side functions. ( Can however be imported on the client side )
 import { z } from 'zod';
 import { sql } from '@vercel/postgres';
+import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 
 const FormSchema = z.object({
     id: z.string(),
@@ -27,6 +29,35 @@ export async function createInvoice(formData: FormData) {
 
     await sql`
         INSERT INTO invoices (customer_id, amount, status, date)
-        VALUES (${customerId}, ${amountInCents}, ${status})
+        VALUES (${customerId}, ${amountInCents}, ${status}, ${date})
     `;
+
+    revalidatePath('/dashboard/invoices'); // Revalidate the client-side route cache to update UI with new data.
+    redirect('/dashboard/invoices'); // Redirect user back to the invoices page.
+
+};
+
+// This is the schema for the update form. We omit the id and date fields because we don't want them to be updated.
+const UpdateInvoice = FormSchema.omit({ id: true, date: true });
+
+export async function updateInvoice(id: string, formData: FormData) {
+    // Extract the form data and validate it with zod.
+    const { customerId, amount, status } = UpdateInvoice.parse({
+        customerId: formData.get('customerId'),
+        amount: formData.get('amount'),
+        status: formData.get('status'),
+    });
+
+    // Converting the amount to cents, as we did in the createInvoice function.
+    const amountInCents = amount * 100;
+
+    // Pass the variables to the SQL query.
+    await sql`
+    UPDATE invoices
+    SET customer_id = ${customerId}, amount = ${amountInCents}, status = ${status}
+    WHERE id = ${id}
+  `;
+
+    revalidatePath('/dashboard/invoices'); // clear the client cache and make a new server request.
+    redirect('/dashboard/invoices'); // redirect the user to the invoice's page.
 };
