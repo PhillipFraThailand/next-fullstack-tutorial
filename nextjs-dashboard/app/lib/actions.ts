@@ -6,24 +6,48 @@ import { redirect } from 'next/navigation';
 
 const FormSchema = z.object({
     id: z.string(),
-    customerId: z.string(),
-    amount: z.coerce.number(), // Coerce casts the value to a number
-    status: z.enum(['pending', 'paid']),
+    customerId: z.string({
+        invalid_type_error: 'Please select a customer.',
+    }),
+    amount: z.coerce.number().gt(0, { message: 'Please enter an amount greater than $0.' }), // Coerce casts the value to a number, it defaults to 0, so use gt set the required value to be greater than 0, so the default wont be accepted.
+    status: z.enum(['pending', 'paid'], {
+        invalid_type_error: 'Please select an invoice status.',
+    }),
     date: z.string(),
 });
 
 const CreateInvoice = FormSchema.omit({ id: true, date: true });
 
+// This is temporary until @types/react-dom is updated
+// Contains the state passed from the useFormState. Won't be using it in the action, but it's a required prop.
+export type State = {
+    errors?: {
+        customerId?: string[];
+        amount?: string[];
+        status?: string[];
+    };
+    message?: string | null;
+};
 
-export async function createInvoice(formData: FormData) {
+// To test this, submit a form and console.log validtedFields to see its structure.
+export async function createInvoice(prevState: State, formData: FormData) {
     // For forms with lots of fields, conside const rawFormData = Object.fromEntries(formData.entries());
-    const { customerId, amount, status } = CreateInvoice.parse({
+    // safeParse() will return an object containing either a success or error
+    const validatedFields = CreateInvoice.safeParse({
         customerId: formData.get('customerId'),
         amount: formData.get('amount'),
         status: formData.get('status'),
     });
 
+    // If form validation fails, return errors early. Otherwise, continue.
+    if (!validatedFields.success) {
+        return {
+            errors: validatedFields.error.flatten().fieldErrors,
+            message: 'Missing Fields. Failed to Create Invoice.',
+        };
+    }
 
+    const { amount, customerId, status } = validatedFields.data; // Destructure the validated data.
     const amountInCents = amount * 100; // Its good practice to store monetary values in cents in databases to eliminate JavaScript floating-point errors and ensure greater accuracy.
     const date = new Date().toISOString().split('T')[0]; // The 'T' separates the date (2022-03-14) from the time (10:30:00Z) in out ISOString 2022-03-14T10:30:00Z. So we will get '2022-03-14'.
 
@@ -37,15 +61,14 @@ export async function createInvoice(formData: FormData) {
             message: 'Database Error: Failed to Create Invoice.',
         };
     };
-    revalidatePath('/dashboard/invoices'); // Revalidate the client-side route cache to update UI with new data.
 
+    revalidatePath('/dashboard/invoices'); // Revalidate the client-side route cache to update UI with new data.
     /**
      * Note how redirect is being called outside of the try/catch block.
      * This is because redirect works by throwing an error, which would be caught by the catch block.
      * To avoid this, you can call redirect after try/catch. redirect would only be reachable if try is successful.
      */
     redirect('/dashboard/invoices'); // Redirect user back to the invoices page.
-
 };
 
 // This is the schema for the update form. We omit the id and date fields because we don't want them to be updated.
